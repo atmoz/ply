@@ -16,7 +16,7 @@ func copyTestDir(subdir string) string {
 		panic(err)
 	}
 
-	fileutil.CopyDirectory(filepath.Join("test_files", subdir), dir)
+	fileutil.CopyDirectory(filepath.Join("test_files", subdir), dir, nil)
 	return dir
 }
 
@@ -37,8 +37,11 @@ func compareWithExpected(file string) bool {
 }
 
 func build(dir string) (site Site) {
-	site.Path = dir
-	site.Init()
+	site.SourcePath = dir
+	site.TargetPath = dir
+	if err := site.Init(); err != nil {
+		panic(err)
+	}
 	site.Build()
 	return
 }
@@ -52,18 +55,6 @@ func TestOnePage(t *testing.T) {
 		t.Fail()
 	}
 }
-
-func TestOnePageClean(t *testing.T) {
-	dir := copyTestDir("one_page")
-	defer os.RemoveAll(dir)
-	site := build(dir)
-	site.Clean()
-
-	if _, err := os.Stat(filepath.Join(dir, "test.html")); os.IsExist(err) {
-		t.Fail()
-	}
-}
-
 func TestOneTemplate(t *testing.T) {
 	dir := copyTestDir("one_template")
 	defer os.RemoveAll(dir)

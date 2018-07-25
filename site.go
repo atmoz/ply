@@ -2,35 +2,69 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/template"
+
+	"github.com/atmoz/ply/fileutil"
 )
 
 type Site struct {
-	Pages []*Page
-	Path  string
+	Pages      []*Page
+	SourcePath string
+	TargetPath string
+	plyPath    string
 
-	templates     map[string]*template.Template
-	templateFnMap template.FuncMap
+	includeMarkdown bool
+	includeTemplate bool
+	copyOptions     *fileutil.CopyOptions
+
+	templates map[string]*template.Template
 }
 
-func (site *Site) Init() {
-	if absPath, err := filepath.Abs(site.Path); err != nil {
-		panic(err)
-	} else {
-		site.Path = absPath
+func (site *Site) Init() (err error) {
+	if site.SourcePath, err = filepath.Abs(site.SourcePath); err != nil {
+		return err
+	}
+	if site.TargetPath, err = filepath.Abs(site.TargetPath); err != nil {
+		return err
+	}
+
+	if site.SourcePath != site.TargetPath && strings.HasPrefix(site.TargetPath, site.SourcePath) {
+		return errors.New("Target path can't be a under source path")
+	}
+	if site.copyOptions == nil {
+		site.copyOptions = new(fileutil.CopyOptions)
+		site.copyOptions.IgnoreRegex = regexp.MustCompile("^\\.") // Hidden files
+	}
+
+	if site.plyPath == "" {
+		site.plyPath = filepath.Join(site.SourcePath, ".ply")
 	}
 
 	site.templates = make(map[string]*template.Template)
-	site.templateFnMap = TemplateFnMap()
+	return nil
 }
 
 func (site *Site) Build() error {
-	if err := filepath.Walk(site.Path, site.buildWalk); err != nil {
+	if site.SourcePath != site.TargetPath {
+		if err := fileutil.CopyDirectory(site.SourcePath, site.TargetPath, site.copyOptions); err != nil {
+			return err
+		}
+
+		if info, err := os.Stat(site.plyPath); !os.IsNotExist(err) && info.IsDir() {
+			if err := fileutil.CopyDirectory(site.plyPath, site.TargetPath, nil); err != nil {
+				return err
+			}
+		}
+	}
+
+	if err := filepath.Walk(site.TargetPath, site.buildWalk); err != nil {
 		return err
 	}
 
@@ -47,18 +81,24 @@ func (site *Site) Build() error {
 				p.Content = content.String()
 			}
 
-			if rel, err := filepath.Rel(site.Path, dirname); err != nil {
+			// Break loop when we are on root (last) level
+			if rel, err := filepath.Rel(site.TargetPath, dirname); err != nil {
 				panic(err)
-			} else if rel == site.Path || rel == "." || rel == ".." || rel == "../.." {
+			} else if rel == "." || rel == "" {
 				break
 			}
 
-			dirname = filepath.Dir(dirname) // Remove last element
+			dirname = filepath.Dir(dirname) // Remove last dir
 		}
 
 		ioutil.WriteFile(p.AbsPath, []byte(p.Content), 0644)
 		fmt.Println("Created:", p.AbsPath)
 	}
+
+	if err := filepath.Walk(site.TargetPath, site.cleanWalk); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -67,7 +107,7 @@ func (site *Site) buildWalk(path string, f os.FileInfo, err error) error {
 		site.Pages = append(site.Pages, NewPage(site, path))
 	} else if filepath.Base(path) == "ply.template" {
 		dirname := filepath.Dir(path)
-		tp := template.New(path).Funcs(site.templateFnMap)
+		tp := template.New(path).Funcs(site.templateFnMap())
 		templateContent, err := ioutil.ReadFile(path)
 		if err != nil {
 			return err
@@ -82,18 +122,11 @@ func (site *Site) buildWalk(path string, f os.FileInfo, err error) error {
 	return nil
 }
 
-func (site *Site) Clean() error {
-	return filepath.Walk(site.Path, site.cleanWalk)
-}
-
 func (site *Site) cleanWalk(path string, f os.FileInfo, err error) error {
-	if strings.HasSuffix(path, ".md") {
-		htmlPath := strings.Replace(path, ".md", ".html", 1)
-		if err := os.Remove(htmlPath); err != nil {
-			fmt.Println("Failed to remove:", htmlPath, err)
-		} else {
-			fmt.Println("Removed:", htmlPath)
-		}
+	cleanMarkdown := !site.includeMarkdown && strings.HasSuffix(path, ".md")
+	cleanTemplate := !site.includeTemplate && filepath.Base(path) == "ply.template"
+	if cleanMarkdown || cleanTemplate {
+		os.Remove(path)
 	}
 	return nil
 }

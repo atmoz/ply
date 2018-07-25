@@ -6,10 +6,16 @@ import (
 	"path/filepath"
 )
 
-func CopyDirectory(fromDir, toDir string) error {
+func CopyDirectory(fromDir, toDir string, options *CopyOptions) error {
 	fromInfo, err := os.Stat(fromDir)
 	if err != nil {
 		return err
+	}
+
+	if options != nil && options.IgnoreRegex != nil {
+		if options.IgnoreRegex.MatchString(filepath.Base(fromDir)) {
+			return nil
+		}
 	}
 
 	err = os.MkdirAll(toDir, fromInfo.Mode())
@@ -27,12 +33,12 @@ func CopyDirectory(fromDir, toDir string) error {
 		toFile := filepath.Join(toDir, fileInfo.Name())
 
 		if fileInfo.IsDir() {
-			err = CopyDirectory(fromFile, toFile)
+			err = CopyDirectory(fromFile, toFile, options)
 			if err != nil {
 				return err
 			}
 		} else {
-			err = CopyFile(fromFile, toFile)
+			err = CopyFile(fromFile, toFile, options)
 			if err != nil {
 				return err
 			}

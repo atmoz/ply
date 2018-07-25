@@ -1,12 +1,13 @@
 package main
 
 import (
+	"io/ioutil"
 	"path/filepath"
 	"regexp"
 	"text/template"
 )
 
-func TemplateFnMap() template.FuncMap {
+func (site *Site) templateFnMap() template.FuncMap {
 	return template.FuncMap{
 		"pathDir":           filepath.Dir,
 		"pathRel":           filepath.Rel,
@@ -15,7 +16,18 @@ func TemplateFnMap() template.FuncMap {
 		"regexReplaceAll":   RegexReplaceAll,
 		"regexFind":         RegexFind,
 		"regexFindSubmatch": RegexFindSubmatch,
+		"include":           site.include,
 	}
+}
+
+func (site *Site) include(path string) (string, error) {
+	absPath := filepath.Join(site.TargetPath, path)
+	content, err := ioutil.ReadFile(absPath)
+	if err != nil {
+		return "", err
+	}
+
+	return string(content), nil
 }
 
 func RegexMatch(pattern string, s string) (bool, error) {

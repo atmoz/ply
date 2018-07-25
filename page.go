@@ -10,27 +10,23 @@ import (
 )
 
 type Page struct {
-	site       *Site
-	Title      string `xml:"h1"`
-	Content    string
-	Dir        string
-	AbsDir     string
-	DirParts   map[string]string
-	Path       string
-	AbsPath    string
-	SrcPath    string
-	AbsSrcPath string
+	site     *Site
+	Title    string
+	Content  string
+	Dir      string
+	AbsDir   string
+	DirParts map[string]string
+	Path     string
+	AbsPath  string
 }
 
 func NewPage(site *Site, path string) *Page {
 	p := new(Page)
 	p.site = site
 	p.AbsDir = filepath.Dir(path)
-	p.Dir, _ = filepath.Rel(site.Path, p.AbsDir)
+	p.Dir, _ = filepath.Rel(site.TargetPath, p.AbsDir)
 	p.AbsPath = strings.Replace(path, ".md", ".html", 1)
-	p.Path, _ = filepath.Rel(site.Path, p.AbsPath)
-	p.AbsSrcPath = path
-	p.SrcPath, _ = filepath.Rel(site.Path, p.AbsSrcPath)
+	p.Path, _ = filepath.Rel(site.TargetPath, p.AbsPath)
 
 	p.DirParts = make(map[string]string)
 	dirNames := strings.Split(p.Dir, string(filepath.Separator))
@@ -47,8 +43,8 @@ func NewPage(site *Site, path string) *Page {
 	htmlContent := blackfriday.Run(content)
 	p.Content = string(htmlContent)
 
-	re := regexp.MustCompile(`<h[1-6]>(.*)</h[1-6]>`)
-	match := re.FindStringSubmatch(p.Content)
+	reTitle := regexp.MustCompile(`<h[1-6]>(.*)</h[1-6]>`)
+	match := reTitle.FindStringSubmatch(p.Content)
 	if match != nil {
 		p.Title = match[1]
 	} else {
@@ -63,6 +59,6 @@ func (p *Page) Sitemap() []*Page {
 }
 
 func (p *Page) SiteRoot() string {
-	path, _ := filepath.Rel(p.AbsDir, p.site.Path)
+	path, _ := filepath.Rel(p.AbsDir, p.site.TargetPath)
 	return filepath.Clean(path)
 }
