@@ -58,6 +58,14 @@ func (p *Page) Sitemap() []*Page {
 	return p.site.Pages
 }
 
+func (p *Page) SitemapReversed() []*Page {
+	reversed := make([]*Page, len(p.site.Pages))
+	for i := range p.site.Pages {
+		reversed[i] = p.site.Pages[len(p.site.Pages)-1-i]
+	}
+	return reversed
+}
+
 func (p *Page) SiteRoot() string {
 	path, _ := filepath.Rel(p.AbsDir, p.site.TargetPath)
 	return filepath.Clean(path)
