@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -69,30 +68,13 @@ func (site *Site) Build() error {
 	}
 
 	for _, p := range site.Pages {
-		// Apply templates recursively
-		dirname := filepath.Dir(p.AbsPath)
-		for {
-			if site.templates[dirname] != nil {
-				var content bytes.Buffer
-				if err := site.templates[dirname].Execute(&content, p); err != nil {
-					fmt.Println(err)
-					os.Exit(1)
-				}
-				p.Content = content.String()
-			}
-
-			// Break loop when we are on root (last) level
-			if rel, err := filepath.Rel(site.TargetPath, dirname); err != nil {
-				panic(err)
-			} else if rel == "." || rel == "" {
-				break
-			}
-
-			dirname = filepath.Dir(dirname) // Remove last dir
+		if content, err := p.parse(); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		} else {
+			ioutil.WriteFile(p.AbsPath, content, 0644)
+			fmt.Println("Created:", p.AbsPath)
 		}
-
-		ioutil.WriteFile(p.AbsPath, []byte(p.Content), 0644)
-		fmt.Println("Created:", p.AbsPath)
 	}
 
 	if err := filepath.Walk(site.TargetPath, site.cleanWalk); err != nil {

@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"text/template"
 )
 
@@ -17,6 +18,7 @@ func (site *Site) templateFnMap() template.FuncMap {
 		"regexFind":         RegexFind,
 		"regexFindSubmatch": RegexFindSubmatch,
 		"include":           site.include,
+		"stringsJoin":       Join,
 	}
 }
 
@@ -59,4 +61,12 @@ func RegexFindSubmatch(pattern string, s string) ([]string, error) {
 	} else {
 		return re.FindStringSubmatch(s), nil
 	}
+}
+
+func Join(a []interface{}, sep string) string {
+	ss := make([]string, len(a))
+	for i, v := range a {
+		ss[i] = v.(string)
+	}
+	return strings.Join(ss, sep)
 }
