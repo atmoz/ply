@@ -37,22 +37,24 @@ Options:
 		site.copyOptions = new(fileutil.CopyOptions)
 		site.copyOptions.IgnoreRegex, err = regexp.Compile(argIgnore)
 		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			fail(err)
 		}
 	}
 
 	if err := site.Init(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		fail(err)
 	}
 
 	if err := site.Build(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		fail(err)
 	}
 
 	PrintMemUsage()
+}
+
+func fail(err error) {
+	fmt.Println("FATAL:", err)
+	os.Exit(1)
 }
 
 func PrintMemUsage() {

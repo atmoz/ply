@@ -17,8 +17,9 @@ type Site struct {
 	Pages      []*Page
 	SourcePath string
 	TargetPath string
-	plyPath    string
+	Tags       map[string][]*Page
 
+	plyPath         string
 	includeMarkdown bool
 	includeTemplate bool
 	copyOptions     *fileutil.CopyOptions
@@ -46,6 +47,7 @@ func (site *Site) Init() (err error) {
 		site.plyPath = filepath.Join(site.SourcePath, ".ply")
 	}
 
+	site.Tags = make(map[string][]*Page)
 	site.templates = make(map[string]*template.Template)
 	return nil
 }
@@ -86,7 +88,11 @@ func (site *Site) Build() error {
 
 func (site *Site) buildWalk(path string, f os.FileInfo, err error) error {
 	if strings.HasSuffix(path, ".md") {
-		site.Pages = append(site.Pages, NewPage(site, path))
+		if page, err := NewPage(site, path); err == nil {
+			site.Pages = append(site.Pages, page)
+		} else {
+			return err
+		}
 	} else if filepath.Base(path) == "ply.template" {
 		dirname := filepath.Dir(path)
 		tp := template.New(path).Funcs(site.templateFnMap())

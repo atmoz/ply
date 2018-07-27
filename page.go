@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io/ioutil"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 
@@ -12,7 +14,7 @@ import (
 )
 
 type Page struct {
-	site       *Site
+	Site       *Site
 	Title      string
 	Content    string
 	Dir        string
@@ -24,9 +26,9 @@ type Page struct {
 	Meta       map[string]interface{}
 }
 
-func NewPage(site *Site, path string) *Page {
+func NewPage(site *Site, path string) (*Page, error) {
 	p := new(Page)
-	p.site = site
+	p.Site = site
 	p.AbsDir = filepath.Dir(path)
 	p.Dir, _ = filepath.Rel(site.TargetPath, p.AbsDir)
 	p.AbsPath = strings.Replace(path, ".md", ".html", 1)
@@ -58,25 +60,27 @@ func NewPage(site *Site, path string) *Page {
 		p.Title = p.Path
 	}
 
-	//	p.Content = string(content)
+	if err := p.registerTags(); err != nil {
+		return nil, err
+	}
 
-	return p
+	return p, nil
 }
 
 func (p *Page) Sitemap() []*Page {
-	return p.site.Pages
+	return p.Site.Pages
 }
 
 func (p *Page) SitemapReversed() []*Page {
-	reversed := make([]*Page, len(p.site.Pages))
-	for i := range p.site.Pages {
-		reversed[i] = p.site.Pages[len(p.site.Pages)-1-i]
+	reversed := make([]*Page, len(p.Site.Pages))
+	for i := range p.Site.Pages {
+		reversed[i] = p.Site.Pages[len(p.Site.Pages)-1-i]
 	}
 	return reversed
 }
 
 func (p *Page) SiteRoot() string {
-	path, _ := filepath.Rel(p.AbsDir, p.site.TargetPath)
+	path, _ := filepath.Rel(p.AbsDir, p.Site.TargetPath)
 	return filepath.Clean(path)
 }
 
@@ -93,28 +97,21 @@ func (p *Page) parse() (result []byte, err error) {
 		return nil, err
 	}
 
-	/*
-		_, result, err = splitMetaAndContent([]byte(p.Content))
-		if err != nil {
-			return nil, err
-		}
-	*/
-
 	p.Content = string(blackfriday.Run(result))
 
 	// Apply templates recursively
 	dirname := filepath.Dir(p.AbsPath)
 	for {
-		if p.site.templates[dirname] != nil {
+		if p.Site.templates[dirname] != nil {
 			var content bytes.Buffer
-			if err := p.site.templates[dirname].Execute(&content, p); err != nil {
+			if err := p.Site.templates[dirname].Execute(&content, p); err != nil {
 				return nil, err
 			}
 			p.Content = string(content.Bytes())
 		}
 
 		// Break loop when we are on root (last) level
-		if rel, err := filepath.Rel(p.site.TargetPath, dirname); err != nil {
+		if rel, err := filepath.Rel(p.Site.TargetPath, dirname); err != nil {
 			panic(err)
 		} else if rel == "." || rel == "" {
 			break
@@ -126,6 +123,23 @@ func (p *Page) parse() (result []byte, err error) {
 	result = []byte(p.Content)
 	p.Content = "" // No longer needed
 	return result, nil
+}
+
+func (p *Page) registerTags() error {
+	if p.Meta["tags"] != nil {
+		if t := reflect.TypeOf(p.Meta["tags"]).String(); t != "[]interface {}" {
+			return errors.New(p.Path + ": metadata \"tags\" must be of type []string, but was " + t)
+		}
+		tags := p.Meta["tags"].([]interface{})
+		for _, tag := range tags {
+			if t := reflect.TypeOf(tag).String(); t != "string" {
+				return errors.New(p.Path + ": tag must be of type string, but was " + t)
+			}
+			name := tag.(string)
+			site.Tags[name] = append(site.Tags[name], p)
+		}
+	}
+	return nil
 }
 
 func splitMetaAndContent(content []byte) (map[string]interface{}, []byte, error) {
