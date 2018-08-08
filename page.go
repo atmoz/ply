@@ -16,7 +16,7 @@ import (
 type Page struct {
 	Site       *Site
 	Title      string
-	Content    string
+	Name       string
 	Dir        string
 	AbsDir     string
 	DirParts   map[string]string
@@ -24,6 +24,9 @@ type Page struct {
 	AbsPath    string
 	AbsSrcPath string
 	Meta       map[string]interface{}
+	tags       []string
+
+	content []byte
 }
 
 func NewPage(site *Site, path string) (*Page, error) {
@@ -34,12 +37,13 @@ func NewPage(site *Site, path string) (*Page, error) {
 	p.AbsPath = strings.Replace(path, ".md", ".html", 1)
 	p.Path, _ = filepath.Rel(site.TargetPath, p.AbsPath)
 	p.AbsSrcPath = path
+	p.Name = filepath.Base(p.Path)
 
 	p.DirParts = make(map[string]string)
 	dirNames := strings.Split(p.Dir, string(filepath.Separator))
 	for i, v := range dirNames {
-		dirPath := strings.Join(dirNames[0:i], string(filepath.Separator))
-		p.DirParts[filepath.Join(p.SiteRoot(), dirPath, v)] = v
+		dirPath := filepath.Join(dirNames[0:i]...)
+		p.DirParts[filepath.Join(dirPath, v)] = v
 	}
 
 	content, err := ioutil.ReadFile(path)
@@ -80,34 +84,57 @@ func (p *Page) SitemapReversed() []*Page {
 }
 
 func (p *Page) SiteRoot() string {
-	path, _ := filepath.Rel(p.AbsDir, p.Site.TargetPath)
-	return filepath.Clean(path)
+	rel, _ := filepath.Rel(p.AbsDir, p.Site.TargetPath)
+	return rel
+}
+
+func (p *Page) Rel(path string) (rel string, err error) {
+	return filepath.Rel(p.AbsDir, filepath.Clean(filepath.Join(p.Site.TargetPath, path)))
+}
+
+func (p *Page) Content() (content string, err error) {
+	bytes, err := p.ContentBytes()
+	if err != nil {
+		return "", err
+	}
+
+	return string(bytes), nil
+}
+
+func (p *Page) ContentBytes() (content []byte, err error) {
+	if p.content != nil {
+		return p.content, nil
+	}
+
+	content, err = ioutil.ReadFile(p.AbsSrcPath)
+	if err != nil {
+		return nil, err
+	}
+
+	_, content, err = splitMetaAndContent(content)
+	if err != nil {
+		return nil, err
+	}
+
+	content = blackfriday.Run(content)
+	return content, nil
 }
 
 func (p *Page) parse() (result []byte, err error) {
-	// Markdown to HTML
-
-	result, err = ioutil.ReadFile(p.AbsSrcPath)
+	p.content, err = p.ContentBytes()
 	if err != nil {
 		return nil, err
 	}
-
-	_, result, err = splitMetaAndContent(result)
-	if err != nil {
-		return nil, err
-	}
-
-	p.Content = string(blackfriday.Run(result))
 
 	// Apply templates recursively
 	dirname := filepath.Dir(p.AbsPath)
 	for {
 		if p.Site.templates[dirname] != nil {
-			var content bytes.Buffer
-			if err := p.Site.templates[dirname].Execute(&content, p); err != nil {
+			var templateBuffer bytes.Buffer
+			if err := p.Site.templates[dirname].template.Execute(&templateBuffer, p); err != nil {
 				return nil, err
 			}
-			p.Content = string(content.Bytes())
+			p.content = templateBuffer.Bytes() // Update content from template
 		}
 
 		// Break loop when we are on root (last) level
@@ -120,25 +147,30 @@ func (p *Page) parse() (result []byte, err error) {
 		dirname = filepath.Dir(dirname) // Remove last dir
 	}
 
-	result = []byte(p.Content)
-	p.Content = "" // No longer needed
+	result = p.content
+	p.content = nil // This was only needed for templating
 	return result, nil
 }
 
 func (p *Page) registerTags() error {
-	if p.Meta["tags"] != nil {
-		if t := reflect.TypeOf(p.Meta["tags"]).String(); t != "[]interface {}" {
-			return errors.New(p.Path + ": metadata \"tags\" must be of type []string, but was " + t)
-		}
-		tags := p.Meta["tags"].([]interface{})
-		for _, tag := range tags {
-			if t := reflect.TypeOf(tag).String(); t != "string" {
-				return errors.New(p.Path + ": tag must be of type string, but was " + t)
-			}
-			name := tag.(string)
-			site.Tags[name] = append(site.Tags[name], p)
-		}
+	if p.Meta["tags"] == nil {
+		return nil
 	}
+
+	if t := reflect.TypeOf(p.Meta["tags"]).String(); t != "[]interface {}" {
+		return errors.New(p.Path + ": metadata \"tags\" must be of type []string, but was " + t)
+	}
+
+	tags := p.Meta["tags"].([]interface{})
+	for _, tag := range tags {
+		if t := reflect.TypeOf(tag).String(); t != "string" {
+			return errors.New(p.Path + ": tag must be of type string, but was " + t)
+		}
+		name := tag.(string)
+		p.tags = append(p.tags, name)
+		site.Tags[name] = append(site.Tags[name], p)
+	}
+
 	return nil
 }
 

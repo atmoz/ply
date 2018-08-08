@@ -16,7 +16,7 @@ func main() {
 	usage := `ply - recursive markdown to HTML converter
 
 Usage:
-  ply <source-path> <target-path> [options]
+  ply [options] <source-path> <target-path>
   ply -h|--help
 
 Options:

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"text/template"
 
 	"github.com/atmoz/ply/fileutil"
 )
@@ -24,7 +23,7 @@ type Site struct {
 	includeTemplate bool
 	copyOptions     *fileutil.CopyOptions
 
-	templates map[string]*template.Template
+	templates map[string]*PlyTemplate
 }
 
 func (site *Site) Init() (err error) {
@@ -48,7 +47,7 @@ func (site *Site) Init() (err error) {
 	}
 
 	site.Tags = make(map[string][]*Page)
-	site.templates = make(map[string]*template.Template)
+	site.templates = make(map[string]*PlyTemplate)
 	return nil
 }
 
@@ -70,12 +69,12 @@ func (site *Site) Build() error {
 	}
 
 	for _, p := range site.Pages {
-		if content, err := p.parse(); err != nil {
+		if content, err := p.parse(); err == nil {
+			ioutil.WriteFile(p.AbsPath, content, 0644)
+			fmt.Println("Page:", p.AbsPath)
+		} else {
 			fmt.Println(err)
 			os.Exit(1)
-		} else {
-			ioutil.WriteFile(p.AbsPath, content, 0644)
-			fmt.Println("Created:", p.AbsPath)
 		}
 	}
 
@@ -87,25 +86,19 @@ func (site *Site) Build() error {
 }
 
 func (site *Site) buildWalk(path string, f os.FileInfo, err error) error {
-	if strings.HasSuffix(path, ".md") {
+	basename := filepath.Base(path)
+	if strings.HasSuffix(basename, ".md") {
 		if page, err := NewPage(site, path); err == nil {
 			site.Pages = append(site.Pages, page)
 		} else {
 			return err
 		}
-	} else if filepath.Base(path) == "ply.template" {
-		dirname := filepath.Dir(path)
-		tp := template.New(path).Funcs(site.templateFnMap())
-		templateContent, err := ioutil.ReadFile(path)
-		if err != nil {
+	} else if basename == "ply.template" {
+		if template, err := NewPlyTemplate(site, path); err != nil {
 			return err
+		} else {
+			site.templates[filepath.Dir(path)] = template
 		}
-
-		tp, err = tp.Parse(string(templateContent))
-		if err != nil {
-			return err
-		}
-		site.templates[dirname] = tp
 	}
 	return nil
 }
