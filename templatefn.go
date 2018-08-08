@@ -42,6 +42,7 @@ func (t *PlyTemplate) templateFnMap() template.FuncMap {
 		"regexFindSubmatch": t.RegexFindSubmatch,
 		"include":           t.include,
 		"stringsJoin":       t.Join,
+		"array":             t.Array,
 		"writeTemplate":     t.WriteTemplate,
 		"timeNow":           t.TimeNow,
 		"timeFormat":        t.TimeFormat,
@@ -96,6 +97,10 @@ func (t *PlyTemplate) Join(a []interface{}, sep string) string {
 		ss[i] = v.(string)
 	}
 	return strings.Join(ss, sep)
+}
+
+func (t *PlyTemplate) Array(ss ...interface{}) []interface{} {
+	return ss
 }
 
 func (t *PlyTemplate) WriteTemplate(filename string, name string, data interface{}) (string, error) {
