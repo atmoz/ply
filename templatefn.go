@@ -9,7 +9,12 @@ import (
 	"strings"
 	"text/template"
 	"time"
+
+	"github.com/atmoz/ply/fileutil"
+	yaml "gopkg.in/yaml.v2"
 )
+
+type YamlData map[string]interface{}
 
 type PlyTemplate struct {
 	path     string
@@ -40,24 +45,89 @@ func (t *PlyTemplate) templateFnMap() template.FuncMap {
 		"regexReplaceAll":   t.RegexReplaceAll,
 		"regexFind":         t.RegexFind,
 		"regexFindSubmatch": t.RegexFindSubmatch,
-		"include":           t.include,
+		"include":           t.Include,
+		"templateImport":    t.TemplateImport,
+		"templateWrite":     t.TemplateWrite,
+		"yamlRead":          t.YamlRead,
+		"yamlWrite":         t.YamlWrite,
 		"stringsJoin":       t.Join,
 		"array":             t.Array,
-		"writeTemplate":     t.WriteTemplate,
 		"timeNow":           t.TimeNow,
 		"timeFormat":        t.TimeFormat,
 		"timeParse":         t.TimeParse,
 	}
 }
 
-func (t *PlyTemplate) include(path string) (string, error) {
-	absPath := filepath.Join(t.site.TargetPath, path)
+func (t *PlyTemplate) AbsRelToTemplate(path string) (string, error) {
+	return fileutil.AbsRootLimit(t.site.TargetPath, filepath.Join(filepath.Dir(t.path), path))
+}
+
+func (t *PlyTemplate) Include(path string) (string, error) {
+	absPath, err := t.AbsRelToTemplate(path)
+	if err != nil {
+		return "", err
+	}
+
 	content, err := ioutil.ReadFile(absPath)
 	if err != nil {
 		return "", err
 	}
 
 	return string(content), nil
+}
+
+func (t *PlyTemplate) TemplateImport(path, name string) (string, error) {
+	content, err := t.Include(path)
+	if err != nil {
+		return "", err
+	}
+
+	_, err = t.template.New(name).Parse(content)
+	return "", err
+}
+
+func (t *PlyTemplate) TemplateWrite(name, path string, data interface{}) (string, error) {
+	absPath, err := t.AbsRelToTemplate(path)
+	if err != nil {
+		return "", err
+	}
+
+	buf := &bytes.Buffer{}
+	if err := t.template.ExecuteTemplate(buf, name, data); err != nil {
+		return "", err
+	}
+
+	fmt.Println("Write template", name, ":", absPath)
+	return "", ioutil.WriteFile(absPath, buf.Bytes(), 0644)
+}
+
+func (t *PlyTemplate) YamlRead(path string) (data YamlData, err error) {
+	absPath, err := t.AbsRelToTemplate(path)
+	if err != nil {
+		return data, err
+	}
+
+	content, err := ioutil.ReadFile(absPath)
+	if err != nil {
+		return data, err
+	}
+
+	err = yaml.Unmarshal(content, &data)
+	return data, err
+}
+
+func (t *PlyTemplate) YamlWrite(path string, data YamlData) (string, error) {
+	absPath, err := t.AbsRelToTemplate(path)
+	if err != nil {
+		return "", err
+	}
+
+	content, err := yaml.Marshal(&data)
+	if err != nil {
+		return "", err
+	}
+
+	return "", ioutil.WriteFile(absPath, content, 0644)
 }
 
 func (t *PlyTemplate) RegexMatch(pattern string, s string) (bool, error) {
@@ -101,17 +171,6 @@ func (t *PlyTemplate) Join(a []interface{}, sep string) string {
 
 func (t *PlyTemplate) Array(ss ...interface{}) []interface{} {
 	return ss
-}
-
-func (t *PlyTemplate) WriteTemplate(filename string, name string, data interface{}) (string, error) {
-	buf := &bytes.Buffer{}
-	if err := t.template.ExecuteTemplate(buf, name, data); err != nil {
-		return "", err
-	}
-
-	absPath := filepath.Join(filepath.Dir(t.path), filepath.Clean(filename))
-	fmt.Println("Write template", name, "to:", absPath)
-	return "", ioutil.WriteFile(absPath, buf.Bytes(), 0644)
 }
 
 func (t *PlyTemplate) TimeNow() time.Time {

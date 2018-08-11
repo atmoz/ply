@@ -88,8 +88,8 @@ func (p *Page) SiteRoot() string {
 	return rel
 }
 
-func (p *Page) Rel(path string) (rel string, err error) {
-	return filepath.Rel(p.AbsDir, filepath.Clean(filepath.Join(p.Site.TargetPath, path)))
+func (p *Page) Rel(path string) (string, error) {
+	return filepath.Rel(p.AbsDir, filepath.Join(p.Site.TargetPath, path))
 }
 
 func (p *Page) Content() (content string, err error) {

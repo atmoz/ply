@@ -1,10 +1,32 @@
 package fileutil
 
 import (
+	"errors"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 )
+
+func AbsRootLimit(rootPath, path string) (string, error) {
+	absRoot, err := filepath.Abs(rootPath)
+	if err != nil {
+		return "", err
+	}
+
+	var absPath string
+	if filepath.IsAbs(path) {
+		absPath = path
+	} else {
+		absPath = filepath.Join(absRoot, path)
+	}
+
+	if strings.HasPrefix(absPath, absRoot) {
+		return absPath, nil
+	} else {
+		return "", errors.New(path + " is not a subdirectory of " + absRoot)
+	}
+}
 
 func CopyDirectory(fromDir, toDir string, options *CopyOptions) error {
 	fromInfo, err := os.Stat(fromDir)
