@@ -3,5 +3,5 @@ package fileutil
 import "regexp"
 
 type CopyOptions struct {
-	IgnoreRegex *regexp.Regexp
+	IgnoreRegex []*regexp.Regexp
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io/ioutil"
+	"net/url"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -12,6 +13,8 @@ import (
 	blackfriday "gopkg.in/russross/blackfriday.v2"
 	yaml "gopkg.in/yaml.v2"
 )
+
+var reMarkdownHref *regexp.Regexp = regexp.MustCompile(`(<a[^>]*href=")([^"]+\.md)("[^>]*>)`)
 
 type Page struct {
 	Site       *Site
@@ -29,15 +32,26 @@ type Page struct {
 	content []byte
 }
 
-func NewPage(site *Site, path string) (*Page, error) {
-	p := new(Page)
+func NewPage(site *Site, absPath string) (p *Page, err error) {
+	if !filepath.IsAbs(absPath) {
+		return nil, errors.New(absPath + " must be an absolute path!")
+	}
+
+	p = new(Page)
 	p.Site = site
-	p.AbsDir = filepath.Dir(path)
-	p.Dir, _ = filepath.Rel(site.TargetPath, p.AbsDir)
-	p.AbsPath = strings.Replace(path, ".md", ".html", 1)
-	p.Path, _ = filepath.Rel(site.TargetPath, p.AbsPath)
-	p.AbsSrcPath = path
-	p.Name = filepath.Base(p.Path)
+	p.AbsSrcPath = absPath
+	p.AbsPath, p.Name = p.getTargetPathAndName(absPath)
+
+	p.Path, err = filepath.Rel(site.TargetPath, p.AbsPath)
+	if err != nil {
+		return nil, err
+	}
+
+	p.AbsDir = filepath.Dir(p.AbsPath)
+	p.Dir, err = filepath.Rel(site.TargetPath, p.AbsDir)
+	if err != nil {
+		return nil, err
+	}
 
 	p.DirParts = make(map[string]string)
 	dirNames := strings.Split(p.Dir, string(filepath.Separator))
@@ -46,7 +60,7 @@ func NewPage(site *Site, path string) (*Page, error) {
 		p.DirParts[filepath.Join(dirPath, v)] = v
 	}
 
-	content, err := ioutil.ReadFile(path)
+	content, err := ioutil.ReadFile(p.AbsSrcPath)
 	if err != nil {
 		panic(err)
 	}
@@ -61,7 +75,7 @@ func NewPage(site *Site, path string) (*Page, error) {
 	} else if h := findFirstHeading(content); h != "" {
 		p.Title = h
 	} else {
-		p.Title = p.Path
+		p.Title = p.Name
 	}
 
 	if err := p.registerTags(); err != nil {
@@ -69,6 +83,28 @@ func NewPage(site *Site, path string) (*Page, error) {
 	}
 
 	return p, nil
+}
+
+func (p *Page) getTargetPathAndName(path string) (newPath string, name string) {
+	nameFromBase := func(path string) string {
+		return strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	}
+
+	if filepath.Base(path) == "index.md" { // index.md -> index.html
+		newPath = strings.Replace(path, ".md", ".html", 1)
+		name = nameFromBase(newPath)
+	} else if strings.HasSuffix(path, ".html.md") { // path.html.md -> path.html
+		newPath = strings.Replace(path, ".md", "", 1)
+		name = nameFromBase(newPath)
+	} else if p.Site.prettyUrls { // path.md -> path/index.html
+		newPath = filepath.Join(strings.Replace(path, ".md", "", 1), "index.html")
+		name = filepath.Dir(newPath)
+	} else { // path.md -> path.html
+		newPath = strings.Replace(path, ".md", ".html", 1)
+		name = nameFromBase(newPath)
+	}
+
+	return
 }
 
 func (p *Page) Sitemap() []*Page {
@@ -117,6 +153,31 @@ func (p *Page) ContentBytes() (content []byte, err error) {
 	}
 
 	content = blackfriday.Run(content)
+
+	// Replace internal .md links
+	if !p.Site.keepLinks {
+		for _, match := range reMarkdownHref.FindAllSubmatch(content, -1) {
+			href := string(match[2])
+
+			hrefUrl, err := url.Parse(href)
+			if err != nil {
+				continue // Ignore, this may not be a normal URL
+			}
+
+			if hrefUrl.IsAbs() {
+				continue // Ignore, do not touch absolute URL
+			}
+
+			before := string(match[1])
+			href = strings.TrimSuffix(href, ".md")
+			if !p.Site.prettyUrls {
+				href += ".html"
+			}
+			after := string(match[3])
+			content = bytes.Replace(content, match[0], []byte(before+href+after), -1)
+		}
+	}
+
 	return content, nil
 }
 

@@ -12,6 +12,11 @@ import (
 	"github.com/atmoz/ply/fileutil"
 )
 
+const defaultTarget string = "ply.build"
+const defaultIgnore string = `/\.`
+const defaultFileMode os.FileMode = 0644
+const defaultDirMode os.FileMode = 0755
+
 type Site struct {
 	Pages      []*Page
 	SourcePath string
@@ -21,26 +26,42 @@ type Site struct {
 	plyPath         string
 	includeMarkdown bool
 	includeTemplate bool
+	prettyUrls      bool
+	keepLinks       bool
 	copyOptions     *fileutil.CopyOptions
 
 	templates map[string]*PlyTemplate
 }
 
 func (site *Site) Init() (err error) {
+	if site.SourcePath == "" {
+		if site.SourcePath, err = os.Getwd(); err != nil {
+			fail(err)
+		}
+	}
 	if site.SourcePath, err = filepath.Abs(site.SourcePath); err != nil {
 		return err
+	}
+
+	if site.TargetPath == "" {
+		site.TargetPath = filepath.Join(site.SourcePath, defaultTarget)
 	}
 	if site.TargetPath, err = filepath.Abs(site.TargetPath); err != nil {
 		return err
 	}
 
-	if site.SourcePath != site.TargetPath && strings.HasPrefix(site.TargetPath, site.SourcePath) {
-		return errors.New("Target path can't be a under source path")
+	if site.SourcePath == site.TargetPath {
+		return errors.New("Target path can't be the same as source path")
 	}
+
 	if site.copyOptions == nil {
 		site.copyOptions = new(fileutil.CopyOptions)
-		site.copyOptions.IgnoreRegex = regexp.MustCompile("^\\.") // Hidden files
+		site.copyOptions.IgnoreRegex = append(
+			site.copyOptions.IgnoreRegex, regexp.MustCompile(defaultIgnore))
 	}
+
+	site.copyOptions.IgnoreRegex = append(
+		site.copyOptions.IgnoreRegex, regexp.MustCompile("^"+site.TargetPath))
 
 	if site.plyPath == "" {
 		site.plyPath = filepath.Join(site.SourcePath, ".ply")
@@ -70,7 +91,14 @@ func (site *Site) Build() error {
 
 	for _, p := range site.Pages {
 		if content, err := p.parse(); err == nil {
-			ioutil.WriteFile(p.AbsPath, content, 0644)
+			if site.prettyUrls {
+				if err = os.MkdirAll(p.AbsDir, defaultDirMode); err != nil {
+					return err
+				}
+			}
+			if err := ioutil.WriteFile(p.AbsPath, content, defaultFileMode); err != nil {
+				return err
+			}
 			fmt.Println("Page:", p.AbsPath)
 		} else {
 			fmt.Println(err)

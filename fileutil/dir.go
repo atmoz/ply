@@ -34,9 +34,11 @@ func CopyDirectory(fromDir, toDir string, options *CopyOptions) error {
 		return err
 	}
 
-	if options != nil && options.IgnoreRegex != nil {
-		if options.IgnoreRegex.MatchString(filepath.Base(fromDir)) {
-			return nil
+	if options != nil {
+		for _, regex := range options.IgnoreRegex {
+			if regex.MatchString(fromDir) {
+				return nil
+			}
 		}
 	}
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -38,9 +39,14 @@ func NewPlyTemplate(site *Site, path string) (t *PlyTemplate, err error) {
 
 func (t *PlyTemplate) templateFnMap() template.FuncMap {
 	return template.FuncMap{
+		"pathBase":          filepath.Base,
 		"pathDir":           filepath.Dir,
 		"pathRel":           filepath.Rel,
 		"pathMatch":         filepath.Match,
+		"listFiles":         t.ListFiles,
+		"hasPage":           t.HasPage,
+		"hasFile":           t.HasFile,
+		"hasFileOrPage":     t.HasFileOrPage,
 		"regexMatch":        t.RegexMatch,
 		"regexReplaceAll":   t.RegexReplaceAll,
 		"regexFind":         t.RegexFind,
@@ -50,7 +56,8 @@ func (t *PlyTemplate) templateFnMap() template.FuncMap {
 		"templateWrite":     t.TemplateWrite,
 		"yamlRead":          t.YamlRead,
 		"yamlWrite":         t.YamlWrite,
-		"stringsJoin":       t.Join,
+		"stringsJoin":       t.StringsJoin,
+		"stringsSplit":      strings.Split,
 		"array":             t.Array,
 		"timeNow":           t.TimeNow,
 		"timeFormat":        t.TimeFormat,
@@ -60,6 +67,70 @@ func (t *PlyTemplate) templateFnMap() template.FuncMap {
 
 func (t *PlyTemplate) AbsRelToTemplate(path string) (string, error) {
 	return fileutil.AbsRootLimit(t.site.TargetPath, filepath.Join(filepath.Dir(t.path), path))
+}
+
+func (t *PlyTemplate) ListFiles(path string, dirNotFile bool, recursive bool) (map[string]string, error) {
+	absPath, err := t.AbsRelToTemplate(path)
+	if err != nil {
+		return nil, err
+	}
+
+	list := make(map[string]string)
+	walkFn := func(subpath string, info os.FileInfo, err error) error {
+		relPath, err := filepath.Rel(absPath, subpath)
+		if err != nil {
+			return err
+		}
+
+		// Ignore sub directories
+		if !recursive && len(strings.Split(relPath, string(filepath.Separator))) > 1 {
+			return nil
+		}
+
+		// Dir or file
+		if (dirNotFile && !info.IsDir()) || (!dirNotFile && info.IsDir()) {
+			return nil
+		}
+
+		// Filter out pages and templates
+		ext := filepath.Ext(relPath)
+		if relPath == "." || ext == ".md" || ext == ".html" || ext == ".template" {
+			return nil
+		}
+
+		list[relPath] = filepath.Base(relPath)
+		return nil
+	}
+
+	if err := filepath.Walk(absPath, walkFn); err != nil {
+		return nil, err
+	}
+
+	return list, nil
+}
+
+func (t *PlyTemplate) HasPage(path string) bool {
+	for _, p := range t.site.Pages {
+		if p.Path == path {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (t *PlyTemplate) HasFile(path string) bool {
+	absPath, err := t.AbsRelToTemplate(path)
+	if err != nil {
+		return false
+	}
+
+	_, err = os.Stat(absPath)
+	return os.IsExist(err)
+}
+
+func (t *PlyTemplate) HasFileOrPage(path string) bool {
+	return t.HasFile(path) || t.HasPage(path)
 }
 
 func (t *PlyTemplate) Include(path string) (string, error) {
@@ -130,12 +201,32 @@ func (t *PlyTemplate) YamlWrite(path string, data YamlData) (string, error) {
 	return "", ioutil.WriteFile(absPath, content, 0644)
 }
 
+var regexCache map[string]*regexp.Regexp
+
+func (t *PlyTemplate) RegexCompileCache(pattern string) (*regexp.Regexp, error) {
+	if regexCache == nil {
+		regexCache = make(map[string]*regexp.Regexp)
+	}
+
+	var err error
+	if regexCache[pattern] == nil {
+		regexCache[pattern], err = regexp.Compile(pattern)
+	}
+
+	return regexCache[pattern], err
+}
+
 func (t *PlyTemplate) RegexMatch(pattern string, s string) (bool, error) {
-	return regexp.MatchString(pattern, s)
+	re, err := t.RegexCompileCache(pattern)
+	if err != nil {
+		return false, err
+	} else {
+		return re.MatchString(s), nil
+	}
 }
 
 func (t *PlyTemplate) RegexReplaceAll(pattern string, src string, repl string) (string, error) {
-	re, err := regexp.Compile(pattern)
+	re, err := t.RegexCompileCache(pattern)
 	if err != nil {
 		return "", err
 	} else {
@@ -144,7 +235,7 @@ func (t *PlyTemplate) RegexReplaceAll(pattern string, src string, repl string) (
 }
 
 func (t *PlyTemplate) RegexFind(pattern string, s string) (string, error) {
-	re, err := regexp.Compile(pattern)
+	re, err := t.RegexCompileCache(pattern)
 	if err != nil {
 		return "", err
 	} else {
@@ -153,7 +244,7 @@ func (t *PlyTemplate) RegexFind(pattern string, s string) (string, error) {
 }
 
 func (t *PlyTemplate) RegexFindSubmatch(pattern string, s string) ([]string, error) {
-	re, err := regexp.Compile(pattern)
+	re, err := t.RegexCompileCache(pattern)
 	if err != nil {
 		return nil, err
 	} else {
@@ -161,7 +252,7 @@ func (t *PlyTemplate) RegexFindSubmatch(pattern string, s string) ([]string, err
 	}
 }
 
-func (t *PlyTemplate) Join(a []interface{}, sep string) string {
+func (t *PlyTemplate) StringsJoin(a []interface{}, sep string) string {
 	ss := make([]string, len(a))
 	for i, v := range a {
 		ss[i] = v.(string)

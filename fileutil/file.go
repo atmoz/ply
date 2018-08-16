@@ -3,26 +3,37 @@ package fileutil
 import (
 	"io"
 	"os"
-	"path/filepath"
 )
 
 func CopyFile(from, to string, options *CopyOptions) error {
-	fromFile, err := os.Open(from)
-	if err != nil {
-		return err
-	}
-	defer fromFile.Close()
-
 	fromInfo, err := os.Stat(from)
 	if err != nil {
 		return err
 	}
 
-	if options != nil && options.IgnoreRegex != nil {
-		if options.IgnoreRegex.MatchString(filepath.Base(from)) {
-			return nil
+	toInfo, toErr := os.Stat(to)
+	if os.IsExist(toErr) {
+		hasMod := fromInfo.ModTime().After(toInfo.ModTime())
+		diffSize := fromInfo.Size() != toInfo.Size()
+
+		if !hasMod && !diffSize {
+			return nil // Skip
 		}
 	}
+
+	if options != nil {
+		for _, regex := range options.IgnoreRegex {
+			if regex.MatchString(from) {
+				return nil
+			}
+		}
+	}
+
+	fromFile, err := os.Open(from)
+	if err != nil {
+		return err
+	}
+	defer fromFile.Close()
 
 	toFile, err := os.OpenFile(to, os.O_CREATE|os.O_RDWR, fromInfo.Mode())
 	if err != nil {

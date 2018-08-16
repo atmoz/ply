@@ -16,13 +16,15 @@ func main() {
 	usage := `ply - recursive markdown to HTML converter
 
 Usage:
-  ply [options] <source-path> <target-path>
+  ply [options] [<source-path>] [<target-path>]
   ply -h|--help
 
 Options:
-  --include-markdown  Include markdown files in target
-  --include-template  Include template files in target
-  --ignore=<regex>    File names to ignore (defaults to "^.")`
+  --include-markdown    Include markdown files in target
+  --include-template    Include template files in target
+  --pretty-urls         Use <path>/index.html trick for pretty urls
+  --keep-links          Do NOT replace internal *.md links with *.html
+  --ignore=<regex>      File names to ignore (defaults to "/\.")`
 
 	args, _ := docopt.ParseDoc(usage)
 
@@ -30,15 +32,18 @@ Options:
 	site.TargetPath, _ = args.String("<target-path>")
 	site.includeMarkdown, _ = args.Bool("--include-markdown")
 	site.includeTemplate, _ = args.Bool("--include-template")
+	site.prettyUrls, _ = args.Bool("--pretty-urls")
+	site.keepLinks, _ = args.Bool("--keep-links")
 
 	argIgnore, _ := args.String("--ignore")
 	if argIgnore != "" {
 		var err error
 		site.copyOptions = new(fileutil.CopyOptions)
-		site.copyOptions.IgnoreRegex, err = regexp.Compile(argIgnore)
+		re, err := regexp.Compile(argIgnore)
 		if err != nil {
 			fail(err)
 		}
+		site.copyOptions.IgnoreRegex = append(site.copyOptions.IgnoreRegex, re)
 	}
 
 	if err := site.Init(); err != nil {
@@ -49,6 +54,7 @@ Options:
 		fail(err)
 	}
 
+	fmt.Println(len(site.Pages), "pages")
 	PrintMemUsage()
 }
 
