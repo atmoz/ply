@@ -93,3 +93,10 @@ func TestLinksPretty(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestExampleBlog(t *testing.T) {
+	var site Site
+	if !buildAndCompare(&site, "example_blog") {
+		t.Fail()
+	}
+}
