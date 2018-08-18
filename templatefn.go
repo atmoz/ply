@@ -163,12 +163,18 @@ func (t *PlyTemplate) TemplateWrite(name, path string, data interface{}) (string
 		return "", err
 	}
 
+	page, err := NewEmptyPage(t.site, absPath)
+	if err != nil {
+		return "", err
+	}
+	page.Data = data
+
 	buf := &bytes.Buffer{}
-	if err := t.template.ExecuteTemplate(buf, name, data); err != nil {
+	if err := t.template.ExecuteTemplate(buf, name, page); err != nil {
 		return "", err
 	}
 
-	fmt.Println("Write template", name, ":", absPath)
+	fmt.Println("File from template", name+":", absPath)
 	return "", ioutil.WriteFile(absPath, buf.Bytes(), 0644)
 }
 

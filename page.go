@@ -16,6 +16,8 @@ import (
 
 var reMarkdownHref *regexp.Regexp = regexp.MustCompile(`(<a[^>]*href=")([^"]+\.md)("[^>]*>)`)
 
+type PageMeta map[string]interface{}
+
 type Page struct {
 	Site       *Site
 	Title      string
@@ -26,38 +28,18 @@ type Page struct {
 	Path       string
 	AbsPath    string
 	AbsSrcPath string
-	Meta       map[string]interface{}
+	Meta       PageMeta
+	Data       interface{}
 	tags       []string
 
 	content []byte
 }
 
 func NewPage(site *Site, absPath string) (p *Page, err error) {
-	if !filepath.IsAbs(absPath) {
-		return nil, errors.New(absPath + " must be an absolute path!")
-	}
-
 	p = new(Page)
-	p.Site = site
-	p.AbsSrcPath = absPath
-	p.AbsPath, p.Name = p.getTargetPathAndName(absPath)
-
-	p.Path, err = filepath.Rel(site.TargetPath, p.AbsPath)
+	err = p.init(site, absPath)
 	if err != nil {
 		return nil, err
-	}
-
-	p.AbsDir = filepath.Dir(p.AbsPath)
-	p.Dir, err = filepath.Rel(site.TargetPath, p.AbsDir)
-	if err != nil {
-		return nil, err
-	}
-
-	p.DirParts = make(map[string]string)
-	dirNames := strings.Split(p.Dir, string(filepath.Separator))
-	for i, v := range dirNames {
-		dirPath := filepath.Join(dirNames[0:i]...)
-		p.DirParts[filepath.Join(dirPath, v)] = v
 	}
 
 	content, err := ioutil.ReadFile(p.AbsSrcPath)
@@ -83,6 +65,36 @@ func NewPage(site *Site, absPath string) (p *Page, err error) {
 	}
 
 	return p, nil
+}
+
+func (p *Page) init(site *Site, absPath string) (err error) {
+	if !filepath.IsAbs(absPath) {
+		return errors.New(absPath + " must be an absolute path!")
+	}
+
+	p.Site = site
+	p.AbsSrcPath = absPath
+	p.AbsPath, p.Name = p.getTargetPathAndName(absPath)
+
+	p.Path, err = filepath.Rel(site.TargetPath, p.AbsPath)
+	if err != nil {
+		return err
+	}
+
+	p.AbsDir = filepath.Dir(p.AbsPath)
+	p.Dir, err = filepath.Rel(site.TargetPath, p.AbsDir)
+	if err != nil {
+		return err
+	}
+
+	p.DirParts = make(map[string]string)
+	dirNames := strings.Split(p.Dir, string(filepath.Separator))
+	for i, v := range dirNames {
+		dirPath := filepath.Join(dirNames[0:i]...)
+		p.DirParts[filepath.Join(dirPath, v)] = v
+	}
+
+	return nil
 }
 
 func (p *Page) getTargetPathAndName(path string) (newPath string, name string) {
@@ -235,7 +247,7 @@ func (p *Page) registerTags() error {
 	return nil
 }
 
-func splitMetaAndContent(content []byte) (map[string]interface{}, []byte, error) {
+func splitMetaAndContent(content []byte) (PageMeta, []byte, error) {
 	re := regexp.MustCompile(`(?ms:\A-{3,}\s*(.+?)-{3,}\s*(.*)\z)`)
 	match := re.FindSubmatch(content)
 
@@ -243,7 +255,7 @@ func splitMetaAndContent(content []byte) (map[string]interface{}, []byte, error)
 		return nil, content, nil
 	}
 
-	var meta map[string]interface{}
+	var meta PageMeta
 	metaRaw := match[1]
 	content = match[2]
 
@@ -263,4 +275,27 @@ func findFirstHeading(content []byte) string {
 	} else {
 		return ""
 	}
+}
+
+type EmptyPage struct {
+	Page
+}
+
+func NewEmptyPage(site *Site, absPath string) (p *EmptyPage, err error) {
+	p = new(EmptyPage)
+	err = p.init(site, absPath)
+	if err != nil {
+		return nil, err
+	}
+
+	p.Title = p.Name
+	return p, nil
+}
+
+func (p *EmptyPage) Content() (content string, err error) {
+	return "", nil
+}
+
+func (p *EmptyPage) ContentBytes() (content []byte, err error) {
+	return []byte(""), nil
 }
