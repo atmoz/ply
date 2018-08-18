@@ -41,6 +41,7 @@ func (t *PlyTemplate) templateFnMap() template.FuncMap {
 	return template.FuncMap{
 		"pathBase":          filepath.Base,
 		"pathDir":           filepath.Dir,
+		"pathExt":           filepath.Ext,
 		"pathRel":           filepath.Rel,
 		"pathMatch":         filepath.Match,
 		"listFiles":         t.ListFiles,

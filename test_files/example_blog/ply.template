@@ -8,6 +8,8 @@
 {{ .Content }}
 
 {{ if eq .Path "index.html" -}}
+{{ templateImport "feed.template" "feed" -}}
+{{ templateWrite "feed" "feed.xml" . -}}
 <ul>
     {{- range .SitemapReversed }}
     {{- if (not (eq .Path "index.html")) }}

@@ -1,0 +1,25 @@
+{{ $RFC3339 := "2006-01-02T15:04:05Z07:00" -}}
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Example blog</title>
+  <link href="localhost"></link>
+  <id>example</id>
+  <updated>{{ $RFC3339 }}</updated>
+  <summary>example</summary>
+  <author>
+    <name>example</name>
+  </author>
+
+  {{ range .Sitemap -}}
+  {{ if (not (eq .Path "index.html")) }}
+  <entry>
+    <title>{{ .Title }}</title>
+    <link href="{{ .Path }}"></link>
+    <id>{{ .Path }}</id>
+    <updated>{{ timeFormat (timeParse $RFC3339 .Meta.date) $RFC3339 }}</updated>
+    <summary type="html"><![CDATA[{{ regexFind `(?Us:<p>.*</p>)` .Content }}]]></summary>
+  </entry>
+  {{- end }}
+  {{- end }}
+</feed>
+

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Example blog</title>
+  <link href="localhost"></link>
+  <id>example</id>
+  <updated>2006-01-02T15:04:05Z07:00</updated>
+  <summary>example</summary>
+  <author>
+    <name>example</name>
+  </author>
+
+  
+  <entry>
+    <title>My first post</title>
+    <link href="my-first-post.html"></link>
+    <id>my-first-post.html</id>
+    <updated>2018-08-17T16:32:00Z</updated>
+    <summary type="html"><![CDATA[<p>Content goes here</p>]]></summary>
+  </entry>
+  <entry>
+    <title>My last post</title>
+    <link href="my-last-post.html"></link>
+    <id>my-last-post.html</id>
+    <updated>2018-08-17T16:35:00Z</updated>
+    <summary type="html"><![CDATA[<p>Content goes here</p>]]></summary>
+  </entry>
+</feed>
+
