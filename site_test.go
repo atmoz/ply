@@ -22,16 +22,14 @@ func copyTestDir(subdir string) string {
 	return dir
 }
 
-func compareWithExpected(file string) bool {
-	content, _ := ioutil.ReadFile(file)
+func compareFiles(a, b string) bool {
+	contentA, _ := ioutil.ReadFile(a)
+	contentB, _ := ioutil.ReadFile(b)
 
-	expectedFile := filepath.Join(file + ".expected")
-	expectedContent, _ := ioutil.ReadFile(expectedFile)
-
-	if string(content) == "" || string(content) != string(expectedContent) {
-		fmt.Println("test", file, string(content))
-		fmt.Println("expe", expectedFile, string(expectedContent))
-		fmt.Println("File", file, "was not as expected")
+	if string(contentA) == "" || string(contentA) != string(contentB) {
+		fmt.Println("Files are not equal:", a, "and", b)
+		fmt.Println(a, string(contentA))
+		fmt.Println(b, string(contentB))
 		return false
 	}
 
@@ -39,17 +37,29 @@ func compareWithExpected(file string) bool {
 }
 
 func compareAllExpectedFiles(site *Site) bool {
+	numFiles := 0
 	walkFn := func(path string, info os.FileInfo, err error) error {
-		if filepath.Ext(path) == ".expected" {
-			testPath := strings.TrimSuffix(path, filepath.Ext(path))
-			if !compareWithExpected(testPath) {
+		testPath := filepath.Clean(strings.Replace(path, "ply.expected", "", 1))
+		if info != nil && !info.IsDir() {
+			numFiles++
+			if !compareFiles(path, testPath) {
 				return errors.New(testPath + " was not as expected")
 			}
 		}
 		return nil
 	}
 
-	return filepath.Walk(site.TargetPath, walkFn) == nil
+	if err := filepath.Walk(filepath.Join(site.TargetPath, "ply.expected"), walkFn); err != nil {
+		fmt.Println(err)
+		return false
+	}
+
+	if numFiles == 0 {
+		fmt.Println("Found no files to compare")
+		return false
+	}
+
+	return true
 }
 
 func buildAndCompare(site *Site, path string) bool {
