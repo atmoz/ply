@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -39,17 +40,18 @@ func compareFiles(a, b string) bool {
 func compareAllExpectedFiles(site *Site) bool {
 	numFiles := 0
 	walkFn := func(path string, info os.FileInfo, err error) error {
-		testPath := filepath.Clean(strings.Replace(path, "ply.expected", "", 1))
+		relPath := strings.TrimPrefix(path, filepath.Join(site.SourcePath, "ply.expected"))
+		targetPath := filepath.Join(site.TargetPath, relPath)
 		if info != nil && !info.IsDir() {
 			numFiles++
-			if !compareFiles(path, testPath) {
-				return errors.New(testPath + " was not as expected")
+			if !compareFiles(path, targetPath) {
+				return errors.New(targetPath + " was not as expected")
 			}
 		}
 		return nil
 	}
 
-	if err := filepath.Walk(filepath.Join(site.TargetPath, "ply.expected"), walkFn); err != nil {
+	if err := filepath.Walk(filepath.Join(site.SourcePath, "ply.expected"), walkFn); err != nil {
 		fmt.Println(err)
 		return false
 	}
@@ -64,12 +66,15 @@ func compareAllExpectedFiles(site *Site) bool {
 
 func buildAndCompare(site *Site, path string) bool {
 	site.SourcePath = copyTestDir(path)
-	defer os.RemoveAll(site.TargetPath)
+	defer os.RemoveAll(site.SourcePath)
 
 	if err := site.Init(); err != nil {
 		fmt.Println(err)
 		return false
 	}
+
+	re := regexp.MustCompile(`ply\.expected$`)
+	site.copyOptions.IgnoreRegex = append(site.copyOptions.IgnoreRegex, re)
 
 	site.Build()
 	return compareAllExpectedFiles(site)
@@ -107,6 +112,13 @@ func TestLinksPretty(t *testing.T) {
 func TestExampleBlog(t *testing.T) {
 	var site Site
 	if !buildAndCompare(&site, "example_blog") {
+		t.Fail()
+	}
+}
+
+func TestExampleGallery(t *testing.T) {
+	var site Site
+	if !buildAndCompare(&site, "example_gallery") {
 		t.Fail()
 	}
 }

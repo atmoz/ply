@@ -44,6 +44,7 @@ func (t *PlyTemplate) templateFnMap() template.FuncMap {
 		"pathExt":           filepath.Ext,
 		"pathRel":           filepath.Rel,
 		"pathMatch":         filepath.Match,
+		"listDirs":          t.ListDirs,
 		"listFiles":         t.ListFiles,
 		"hasPage":           t.HasPage,
 		"hasFile":           t.HasFile,
@@ -70,7 +71,15 @@ func (t *PlyTemplate) AbsRelToTemplate(path string) (string, error) {
 	return fileutil.AbsRootLimit(t.site.TargetPath, filepath.Join(filepath.Dir(t.path), path))
 }
 
-func (t *PlyTemplate) ListFiles(path string, dirNotFile bool, recursive bool) (map[string]string, error) {
+func (t *PlyTemplate) ListDirs(path string, recursive bool) (map[string]string, error) {
+	return t.listFiles(path, true, recursive)
+}
+
+func (t *PlyTemplate) ListFiles(path string, recursive bool) (map[string]string, error) {
+	return t.listFiles(path, false, recursive)
+}
+
+func (t *PlyTemplate) listFiles(path string, dirNotFile bool, recursive bool) (map[string]string, error) {
 	absPath, err := t.AbsRelToTemplate(path)
 	if err != nil {
 		return nil, err
