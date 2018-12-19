@@ -61,7 +61,7 @@ func (site *Site) Init() (err error) {
 	}
 
 	site.copyOptions.IgnoreRegex = append(
-		site.copyOptions.IgnoreRegex, regexp.MustCompile("^"+site.TargetPath))
+		site.copyOptions.IgnoreRegex, regexp.MustCompile("^"+regexp.QuoteMeta(site.TargetPath)))
 
 	if site.plyPath == "" {
 		site.plyPath = filepath.Join(site.SourcePath, ".ply")
