@@ -92,14 +92,14 @@ func (site *Site) Build() error {
 	for _, p := range site.Pages {
 		if content, err := p.parse(); err == nil {
 			if site.prettyUrls {
-				if err = os.MkdirAll(p.AbsDir, defaultDirMode); err != nil {
+				if err = os.MkdirAll(p.Path.AbsDir, defaultDirMode); err != nil {
 					return err
 				}
 			}
-			if err := ioutil.WriteFile(p.AbsPath, content, defaultFileMode); err != nil {
+			if err := ioutil.WriteFile(p.Path.Abs, content, defaultFileMode); err != nil {
 				return err
 			}
-			fmt.Println("Page:", p.AbsPath)
+			fmt.Println("Page:", p.Path.Abs)
 		} else {
 			fmt.Println(err)
 			os.Exit(1)

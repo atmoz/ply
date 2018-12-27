@@ -19,30 +19,25 @@ var reMarkdownHref *regexp.Regexp = regexp.MustCompile(`(<a[^>]*href=")([^"]+\.m
 type PageMeta map[string]interface{}
 
 type Page struct {
-	Site       *Site
-	Title      string
-	Name       string
-	Dir        string
-	AbsDir     string
-	DirParts   map[string]string
-	Path       string
-	AbsPath    string
-	AbsSrcPath string
-	Meta       PageMeta
-	Data       interface{}
-	tags       []string
+	Site  *Site
+	Title string
+	Name  string
+	Path  *Path
+	Meta  PageMeta
+	Data  interface{}
+	tags  []string
 
 	content []byte
 }
 
-func NewPage(site *Site, absPath string) (p *Page, err error) {
+func NewPage(site *Site, absSrcPath string) (p *Page, err error) {
 	p = new(Page)
-	err = p.init(site, absPath)
+	err = p.init(site, absSrcPath)
 	if err != nil {
 		return nil, err
 	}
 
-	content, err := ioutil.ReadFile(p.AbsSrcPath)
+	content, err := ioutil.ReadFile(p.Path.AbsSrc)
 	if err != nil {
 		panic(err)
 	}
@@ -67,56 +62,24 @@ func NewPage(site *Site, absPath string) (p *Page, err error) {
 	return p, nil
 }
 
-func (p *Page) init(site *Site, absPath string) (err error) {
-	if !filepath.IsAbs(absPath) {
-		return errors.New(absPath + " must be an absolute path!")
+func (p *Page) init(site *Site, absSrcPath string) (err error) {
+	if !filepath.IsAbs(absSrcPath) {
+		return errors.New(absSrcPath + " must be an absolute path!")
 	}
 
 	p.Site = site
-	p.AbsSrcPath = absPath
-	p.AbsPath, p.Name = p.getTargetPathAndName(absPath)
-
-	p.Path, err = filepath.Rel(site.TargetPath, p.AbsPath)
+	p.Path, err = NewPath(site, absSrcPath)
 	if err != nil {
 		return err
 	}
 
-	p.AbsDir = filepath.Dir(p.AbsPath)
-	p.Dir, err = filepath.Rel(site.TargetPath, p.AbsDir)
-	if err != nil {
-		return err
-	}
-
-	p.DirParts = make(map[string]string)
-	dirNames := strings.Split(p.Dir, string(filepath.Separator))
-	for i, v := range dirNames {
-		dirPath := filepath.Join(dirNames[0:i]...)
-		p.DirParts[filepath.Join(dirPath, v)] = v
+	if filepath.Base(p.Path.Rel) == "index.html" {
+		p.Name = filepath.Base(p.Path.Rel)
+	} else {
+		p.Name = strings.TrimSuffix(filepath.Base(p.Path.Rel), filepath.Ext(p.Path.Rel))
 	}
 
 	return nil
-}
-
-func (p *Page) getTargetPathAndName(path string) (newPath string, name string) {
-	nameFromBase := func(path string) string {
-		return strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-	}
-
-	if filepath.Base(path) == "index.md" { // index.md -> index.html
-		newPath = strings.Replace(path, ".md", ".html", 1)
-		name = nameFromBase(newPath)
-	} else if strings.HasSuffix(path, ".html.md") { // path.html.md -> path.html
-		newPath = strings.Replace(path, ".md", "", 1)
-		name = nameFromBase(newPath)
-	} else if p.Site.prettyUrls { // path.md -> path/index.html
-		newPath = filepath.Join(strings.Replace(path, ".md", "", 1), "index.html")
-		name = filepath.Dir(newPath)
-	} else { // path.md -> path.html
-		newPath = strings.Replace(path, ".md", ".html", 1)
-		name = nameFromBase(newPath)
-	}
-
-	return
 }
 
 func (p *Page) Sitemap() []*Page {
@@ -129,15 +92,6 @@ func (p *Page) SitemapReversed() []*Page {
 		reversed[i] = p.Site.Pages[len(p.Site.Pages)-1-i]
 	}
 	return reversed
-}
-
-func (p *Page) SiteRoot() string {
-	rel, _ := filepath.Rel(p.AbsDir, p.Site.TargetPath)
-	return rel
-}
-
-func (p *Page) Rel(path string) (string, error) {
-	return filepath.Rel(p.AbsDir, filepath.Join(p.Site.TargetPath, path))
 }
 
 func (p *Page) Content() (content string, err error) {
@@ -154,7 +108,7 @@ func (p *Page) ContentBytes() (content []byte, err error) {
 		return p.content, nil
 	}
 
-	content, err = ioutil.ReadFile(p.AbsSrcPath)
+	content, err = ioutil.ReadFile(p.Path.AbsSrc)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +154,7 @@ func (p *Page) parse() (result []byte, err error) {
 	}
 
 	// Apply templates recursively
-	dirname := filepath.Dir(p.AbsPath)
+	dirname := p.Path.AbsDir
 	for {
 		if p.Site.templates[dirname] != nil {
 			var templateBuffer bytes.Buffer
@@ -231,13 +185,13 @@ func (p *Page) registerTags() error {
 	}
 
 	if t := reflect.TypeOf(p.Meta["tags"]).String(); t != "[]interface {}" {
-		return errors.New(p.Path + ": metadata \"tags\" must be of type []string, but was " + t)
+		return errors.New(p.Path.Rel + ": metadata \"tags\" must be of type []string, but was " + t)
 	}
 
 	tags := p.Meta["tags"].([]interface{})
 	for _, tag := range tags {
 		if t := reflect.TypeOf(tag).String(); t != "string" {
-			return errors.New(p.Path + ": tag must be of type string, but was " + t)
+			return errors.New(p.Path.Rel + ": tag must be of type string, but was " + t)
 		}
 		name := tag.(string)
 		p.tags = append(p.tags, name)
@@ -245,6 +199,22 @@ func (p *Page) registerTags() error {
 	}
 
 	return nil
+}
+
+func (p *Page) Url() string {
+	return p.Path.Url()
+}
+
+func (p *Page) UrlDirParts() map[string]string {
+	return p.Path.UrlDirParts()
+}
+
+func (p *Page) UrlRelTo(relPath string) (string, error) {
+	return p.Path.UrlRelTo(relPath)
+}
+
+func (p *Page) UrlToRoot() string {
+	return p.Path.UrlToRoot()
 }
 
 func splitMetaAndContent(content []byte) (PageMeta, []byte, error) {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	urlpath "path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -39,11 +40,11 @@ func NewPlyTemplate(site *Site, path string) (t *PlyTemplate, err error) {
 
 func (t *PlyTemplate) templateFnMap() template.FuncMap {
 	return template.FuncMap{
-		"pathBase":          filepath.Base,
-		"pathDir":           filepath.Dir,
-		"pathExt":           filepath.Ext,
-		"pathRel":           filepath.Rel,
-		"pathMatch":         filepath.Match,
+		"urlBase":           urlpath.Base,
+		"urlDir":            urlpath.Dir,
+		"urlExt":            urlpath.Ext,
+		"urlMatch":          urlpath.Match,
+		"urlRel":            urlRel,
 		"listDirs":          t.ListDirs,
 		"listFiles":         t.ListFiles,
 		"hasPage":           t.HasPage,
@@ -67,20 +68,20 @@ func (t *PlyTemplate) templateFnMap() template.FuncMap {
 	}
 }
 
-func (t *PlyTemplate) AbsRelToTemplate(path string) (string, error) {
-	return fileutil.AbsRootLimit(t.site.TargetPath, filepath.Join(filepath.Dir(t.path), path))
+func (t *PlyTemplate) AbsRelToTemplate(url string) (string, error) {
+	return fileutil.AbsRootLimit(t.site.TargetPath, filepath.Join(filepath.Dir(t.path), url))
 }
 
-func (t *PlyTemplate) ListDirs(path string, recursive bool) (map[string]string, error) {
-	return t.listFiles(path, true, recursive)
+func (t *PlyTemplate) ListDirs(url string, recursive bool) (map[string]string, error) {
+	return t.listFiles(url, true, recursive)
 }
 
-func (t *PlyTemplate) ListFiles(path string, recursive bool) (map[string]string, error) {
-	return t.listFiles(path, false, recursive)
+func (t *PlyTemplate) ListFiles(url string, recursive bool) (map[string]string, error) {
+	return t.listFiles(url, false, recursive)
 }
 
-func (t *PlyTemplate) listFiles(path string, dirNotFile bool, recursive bool) (map[string]string, error) {
-	absPath, err := t.AbsRelToTemplate(path)
+func (t *PlyTemplate) listFiles(url string, dirNotFile bool, recursive bool) (map[string]string, error) {
+	absPath, err := t.AbsRelToTemplate(url)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +94,7 @@ func (t *PlyTemplate) listFiles(path string, dirNotFile bool, recursive bool) (m
 		}
 
 		// Ignore sub directories
-		if !recursive && len(strings.Split(relPath, string(filepath.Separator))) > 1 {
+		if !recursive && len(strings.Split(relPath, "/")) > 1 {
 			return nil
 		}
 
@@ -108,7 +109,7 @@ func (t *PlyTemplate) listFiles(path string, dirNotFile bool, recursive bool) (m
 			return nil
 		}
 
-		list[relPath] = filepath.Base(relPath)
+		list[normalizePathToUrl(relPath)] = filepath.Base(relPath)
 		return nil
 	}
 
@@ -119,9 +120,9 @@ func (t *PlyTemplate) listFiles(path string, dirNotFile bool, recursive bool) (m
 	return list, nil
 }
 
-func (t *PlyTemplate) HasPage(path string) bool {
+func (t *PlyTemplate) HasPage(url string) bool {
 	for _, p := range t.site.Pages {
-		if p.Path == path {
+		if p.Path.Url() == url {
 			return true
 		}
 	}
@@ -129,8 +130,8 @@ func (t *PlyTemplate) HasPage(path string) bool {
 	return false
 }
 
-func (t *PlyTemplate) HasFile(path string) bool {
-	absPath, err := t.AbsRelToTemplate(path)
+func (t *PlyTemplate) HasFile(url string) bool {
+	absPath, err := t.AbsRelToTemplate(url)
 	if err != nil {
 		return false
 	}
@@ -139,12 +140,12 @@ func (t *PlyTemplate) HasFile(path string) bool {
 	return os.IsExist(err)
 }
 
-func (t *PlyTemplate) HasFileOrPage(path string) bool {
-	return t.HasFile(path) || t.HasPage(path)
+func (t *PlyTemplate) HasFileOrPage(url string) bool {
+	return t.HasFile(url) || t.HasPage(url)
 }
 
-func (t *PlyTemplate) Include(path string) (string, error) {
-	absPath, err := t.AbsRelToTemplate(path)
+func (t *PlyTemplate) Include(url string) (string, error) {
+	absPath, err := t.AbsRelToTemplate(url)
 	if err != nil {
 		return "", err
 	}
@@ -157,8 +158,8 @@ func (t *PlyTemplate) Include(path string) (string, error) {
 	return string(content), nil
 }
 
-func (t *PlyTemplate) TemplateImport(path, name string) (string, error) {
-	content, err := t.Include(path)
+func (t *PlyTemplate) TemplateImport(url, name string) (string, error) {
+	content, err := t.Include(url)
 	if err != nil {
 		return "", err
 	}
@@ -167,8 +168,8 @@ func (t *PlyTemplate) TemplateImport(path, name string) (string, error) {
 	return "", err
 }
 
-func (t *PlyTemplate) TemplateWrite(name, path string, data interface{}) (string, error) {
-	absPath, err := t.AbsRelToTemplate(path)
+func (t *PlyTemplate) TemplateWrite(name, url string, data interface{}) (string, error) {
+	absPath, err := t.AbsRelToTemplate(url)
 	if err != nil {
 		return "", err
 	}
@@ -188,8 +189,8 @@ func (t *PlyTemplate) TemplateWrite(name, path string, data interface{}) (string
 	return "", ioutil.WriteFile(absPath, buf.Bytes(), 0644)
 }
 
-func (t *PlyTemplate) YamlRead(path string) (data YamlData, err error) {
-	absPath, err := t.AbsRelToTemplate(path)
+func (t *PlyTemplate) YamlRead(url string) (data YamlData, err error) {
+	absPath, err := t.AbsRelToTemplate(url)
 	if err != nil {
 		return data, err
 	}
@@ -203,8 +204,8 @@ func (t *PlyTemplate) YamlRead(path string) (data YamlData, err error) {
 	return data, err
 }
 
-func (t *PlyTemplate) YamlWrite(path string, data YamlData) (string, error) {
-	absPath, err := t.AbsRelToTemplate(path)
+func (t *PlyTemplate) YamlWrite(url string, data YamlData) (string, error) {
+	absPath, err := t.AbsRelToTemplate(url)
 	if err != nil {
 		return "", err
 	}
@@ -290,4 +291,13 @@ func (t *PlyTemplate) TimeFormat(u time.Time, layout string) string {
 
 func (t *PlyTemplate) TimeParse(layout, value string) (time.Time, error) {
 	return time.Parse(layout, value)
+}
+
+func urlRel(baseUrl, targetUrl string) (string, error) {
+	rel, err := filepath.Rel(baseUrl, targetUrl)
+	if err != nil {
+		return "", err
+	}
+
+	return normalizePathToUrl(rel), nil
 }
