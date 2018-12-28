@@ -65,6 +65,8 @@ func (t *PlyTemplate) templateFnMap() template.FuncMap {
 		"timeNow":           t.TimeNow,
 		"timeFormat":        t.TimeFormat,
 		"timeParse":         t.TimeParse,
+		"mathInc":           t.MathInc,
+		"mathDec":           t.MathDec,
 	}
 }
 
@@ -291,6 +293,14 @@ func (t *PlyTemplate) TimeFormat(u time.Time, layout string) string {
 
 func (t *PlyTemplate) TimeParse(layout, value string) (time.Time, error) {
 	return time.Parse(layout, value)
+}
+
+func (t *PlyTemplate) MathInc(i int) int {
+	return i + 1
+}
+
+func (t *PlyTemplate) MathDec(i int) int {
+	return i - 1
 }
 
 func urlRel(baseUrl, targetUrl string) (string, error) {
