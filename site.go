@@ -28,6 +28,7 @@ type Site struct {
 	includeTemplate bool
 	prettyUrls      bool
 	keepLinks       bool
+	allowExec       bool
 	copyOptions     *fileutil.CopyOptions
 
 	templates map[string]*PlyTemplate

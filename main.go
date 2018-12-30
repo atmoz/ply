@@ -24,7 +24,9 @@ Options:
   --include-template    Include template files in target
   --pretty-urls         Use <path>/index.html trick for pretty urls
   --keep-links          Do NOT replace internal *.md links with *.html
-  --ignore=<regex>      File names to ignore (defaults to "/\.")`
+  --ignore=<regex>      File names to ignore (defaults to "/\.")
+  --allow-exec          Allow templates to execute commands (BE CAREFUL!)
+  `
 
 	args, _ := docopt.ParseDoc(usage)
 
@@ -34,6 +36,7 @@ Options:
 	site.includeTemplate, _ = args.Bool("--include-template")
 	site.prettyUrls, _ = args.Bool("--pretty-urls")
 	site.keepLinks, _ = args.Bool("--keep-links")
+	site.allowExec, _ = args.Bool("--allow-exec")
 
 	argIgnore, _ := args.String("--ignore")
 	if argIgnore != "" {

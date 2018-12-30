@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	urlpath "path"
 	"path/filepath"
 	"regexp"
@@ -67,6 +68,8 @@ func (t *PlyTemplate) templateFnMap() template.FuncMap {
 		"timeParse":         t.TimeParse,
 		"mathInc":           t.MathInc,
 		"mathDec":           t.MathDec,
+		"exec":              t.Exec,
+		"null":              t.Null,
 	}
 }
 
@@ -301,6 +304,61 @@ func (t *PlyTemplate) MathInc(i int) int {
 
 func (t *PlyTemplate) MathDec(i int) int {
 	return i - 1
+}
+
+func (t *PlyTemplate) Exec(name string, arg ...string) (string, error) {
+
+	fmt.Print("Executing command: " + name + " " + strings.Join(arg, " ") + " ... ")
+
+	if !t.site.allowExec {
+		fmt.Println("BLOCKED! Use --allow-exec to allow command execution in templates")
+		return "", nil
+	}
+
+	cmd := new(exec.Cmd)
+	cmd.Dir = t.site.TargetPath
+
+	var err error
+	cmd.Path, err = exec.LookPath(name)
+	if err != nil {
+		// Try looking up name in dir
+		newname := filepath.Join(cmd.Dir, name)
+		var err2 error
+		cmd.Path, err2 = exec.LookPath(newname)
+		if err2 != nil {
+			return "", err2
+		}
+	}
+
+	cmd.Args = append([]string{cmd.Path}, arg...)
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return "", err
+	}
+	if err := cmd.Start(); err != nil {
+		return "", err
+	}
+
+	byteout, _ := ioutil.ReadAll(stdout)
+	byteerr, _ := ioutil.ReadAll(stderr)
+
+	if err := cmd.Wait(); err != nil {
+		fmt.Println("FAILED: " + err.Error())
+		fmt.Println("OUTPUT: " + string(byteerr))
+		return "", err
+	}
+
+	fmt.Println("SUCCESS")
+	return string(byteout), nil
+}
+
+func (t *PlyTemplate) Null(arg ...interface{}) string {
+	return ""
 }
 
 func urlRel(baseUrl, targetUrl string) (string, error) {
